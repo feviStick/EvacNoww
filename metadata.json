@@ -1,0 +1,6 @@
+{
+  "name": "EvacNOW",
+  "description": "National Flood Risk Command Center for Pan-India early warning and telemetry monitoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
