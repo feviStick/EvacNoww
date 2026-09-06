@@ -1,12 +1,2020 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EvacNOW</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EvacNOW — National Flood Risk Command Center</title>
+  <meta name="description" content="Pan-India AI-Based National Flood Early Warning and Evacuation Command System covering Yamuna, Ganges, Brahmaputra, Godavari, and Mahanadi basins." />
+  <meta property="og:title" content="EvacNOW — National Flood Risk Command Center" />
+  <meta property="og:description" content="Pan-India AI-Based National Flood Early Warning and Evacuation Command System" />
+  <meta property="og:type" content="website" />
+
+  <!-- External CDN Libraries -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#172033',
+              900: '#0F172A',
+              950: '#090D16',
+            },
+            flood: {
+              severe: '#EF4444',
+              moderate: '#F59E0B',
+              safe: '#10B981',
+              radar: '#06B6D4',
+            }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'radar-spin': 'spin 4s linear infinite',
+            'beacon': 'beacon 1.5s ease-in-out infinite',
+          },
+          keyframes: {
+            beacon: {
+              '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+              '50%': { transform: 'scale(1.35)', opacity: '0.4' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Custom Styles for Operations Center -->
+  <style>
+    /* Dark Matter styling */
+    body {
+      background-color: #0F172A;
+      color: #F1F5F9;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Emergency strobe effect overlay */
+    #emergency-overlay {
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .emergency-active #emergency-overlay {
+      opacity: 1;
+      animation: strobeBorder 1.2s ease-in-out infinite;
+    }
+
+    @keyframes strobeBorder {
+      0%, 100% {
+        box-shadow: inset 0 0 45px rgba(239, 68, 68, 0.45);
+        border: 2px solid rgba(239, 68, 68, 0.7);
+      }
+      50% {
+        box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.15);
+        border: 2px solid rgba(239, 68, 68, 0.2);
+      }
+    }
+
+    /* Leaflet popup customization */
+    .leaflet-popup-content-wrapper {
+      background: #1E293B !important;
+      color: #F8FAFC !important;
+      border: 1px solid #334155 !important;
+      border-radius: 10px !important;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6) !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+    .leaflet-popup-tip {
+      background: #1E293B !important;
+      border: 1px solid #334155 !important;
+    }
+    .leaflet-popup-content {
+      margin: 12px 14px !important;
+      line-height: 1.4 !important;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0F172A;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Pulse glow utility */
+    .glow-severe {
+      box-shadow: 0 0 18px rgba(239, 68, 68, 0.35);
+    }
+    .glow-radar {
+      box-shadow: 0 0 14px rgba(6, 182, 212, 0.35);
+    }
+
+    /* Tactical River & Evacuation Flow Animations */
+    @keyframes riverFlow {
+      from { stroke-dashoffset: 48; }
+      to { stroke-dashoffset: 0; }
+    }
+    .river-flow-severe {
+      stroke-dasharray: 8, 6;
+      animation: riverFlow 1.2s linear infinite;
+      filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.9));
+    }
+    .river-flow-moderate {
+      stroke-dasharray: 8, 6;
+      animation: riverFlow 1.7s linear infinite;
+      filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.8));
+    }
+    .river-flow-normal {
+      stroke-dasharray: 10, 6;
+      animation: riverFlow 2.2s linear infinite;
+      filter: drop-shadow(0 0 5px rgba(6, 182, 212, 0.7));
+    }
+    .evac-route-anim {
+      stroke-dasharray: 6, 6;
+      animation: riverFlow 1.1s linear infinite;
+      filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.9));
+    }
+
+    /* Rotating Radar Sweep Cone */
+    @keyframes radarSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .radar-sweep-cone {
+      transform-origin: 50% 50%;
+      animation: radarSpin 3.5s linear infinite;
+    }
+
+    /* Tactical Marker Pins & Badges */
+    .tactical-marker-pin {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7));
+      transition: transform 0.15s ease;
+    }
+    .tactical-marker-pin:hover {
+      transform: scale(1.08);
+    }
+    .beacon-pulse {
+      position: absolute;
+      inset: -5px;
+      border-radius: 50%;
+      animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+      opacity: 0.75;
+    }
+    .tactical-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 5px;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .shelter-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(52, 211, 153, 0.8);
+      color: #34D399;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .dam-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(14, 165, 233, 0.85);
+      color: #38BDF8;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .river-name-badge {
+      background: rgba(15, 23, 42, 0.94) !important;
+      border: 1px solid rgba(56, 189, 248, 0.8) !important;
+      color: #38BDF8 !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+      font-size: 10px !important;
+      font-weight: 700 !important;
+      padding: 1.5px 7px !important;
+      border-radius: 4px !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7) !important;
+      white-space: nowrap !important;
+      letter-spacing: 0.02em !important;
+      pointer-events: auto !important;
+    }
+    .leaflet-tooltip-top:before,
+    .leaflet-tooltip-bottom:before,
+    .leaflet-tooltip-left:before,
+    .leaflet-tooltip-right:before {
+      display: none !important;
+    }
+
+    /* Leaflet Dark UI Controls */
+    .leaflet-bar {
+      border: 1px solid #334155 !important;
+      border-radius: 8px !important;
+      overflow: hidden;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5) !important;
+    }
+    .leaflet-bar a {
+      background-color: #1E293B !important;
+      color: #38BDF8 !important;
+      border-bottom: 1px solid #334155 !important;
+      transition: all 0.2s ease;
+    }
+    .leaflet-bar a:hover {
+      background-color: #334155 !important;
+      color: #FFFFFF !important;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-[#0F172A] text-slate-100 flex flex-col antialiased selection:bg-cyan-900 selection:text-cyan-100 relative">
+  <!-- Emergency Screen Flashing Overlay -->
+  <div id="emergency-overlay" class="fixed inset-0 z-50 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+  <!-- 1. TOP COMMAND NAVIGATION -->
+  <header class="w-full bg-[#1E293B]/90 backdrop-blur-md border-b border-slate-700/80 px-4 py-2.5 z-40 sticky top-0 shadow-lg">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+      
+      <!-- Left: Title & Radar Pulse -->
+      <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+        <div class="flex items-center gap-2.5">
+          <!-- Pulsing Radar Icon -->
+          <div class="relative flex items-center justify-center w-10 h-10 rounded-lg bg-slate-900 border border-cyan-500/40 text-cyan-400 shadow-inner">
+            <span class="absolute w-full h-full rounded-lg bg-cyan-500/20 animate-ping opacity-75"></span>
+            <i data-lucide="radar" class="w-5 h-5 animate-spin duration-3000 text-cyan-400"></i>
+            <span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400"></span>
+          </div>
+
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 id="nav-title" class="text-lg md:text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                EvacNOW
+                <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300">
+                  NDMA Ops • v4.2
+                </span>
+              </h1>
+            </div>
+            <p id="nav-subtitle" class="text-xs text-slate-400 font-medium">
+              National Flood Risk Command Center • Pan-India Basin Operations
+            </p>
+          </div>
+        </div>
+
+        <!-- Mobile-only quick toggle button -->
+        <div class="md:hidden flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-[11px] text-emerald-400 font-medium">LIVE</span>
+        </div>
+      </div>
+
+      <!-- Center: Live Sensor Sync Status Badge -->
+      <div class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-xs text-slate-300">
+        <span class="relative flex h-2.5 w-2.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+        <span id="nav-status-text" class="font-medium">
+          IMD, ISRO Bhuvan & CWC Feeds Online — Sync 1 Min Ago
+        </span>
+        <span class="text-slate-500">|</span>
+        <span id="utc-clock" class="font-mono text-cyan-400 font-semibold text-[11px]">
+          --:--:-- IST
+        </span>
+      </div>
+
+      <!-- Right Controls: Language Selector & Emergency Simulation Button -->
+      <div class="flex items-center gap-2.5 w-full md:w-auto justify-end">
+        <!-- Audio alert toggle -->
+        <button id="btn-audio-toggle" title="Toggle Emergency Siren Audio" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-colors">
+          <i id="audio-icon" data-lucide="volume-2" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Language Selector -->
+        <div class="relative">
+          <select id="lang-selector" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-cyan-500 focus:outline-none cursor-pointer">
+            <option value="en" selected>English</option>
+            <option value="hi">हिन्दी (Hindi)</option>
+            <option value="bn">বাংলা (Bengali)</option>
+          </select>
+        </div>
+
+        <!-- Simulation Action Button -->
+        <button id="btn-simulate-flood" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 active:bg-red-700 text-white text-xs font-bold transition-all shadow-md shadow-red-900/40 border border-red-500/80 cursor-pointer">
+          <i data-lucide="alert-triangle" class="w-4 h-4 animate-bounce"></i>
+          <span id="btn-simulate-text">Simulate Critical Flood Level (&gt;85% Risk)</span>
+        </button>
+
+        <!-- Reset Button (Hidden initially) -->
+        <button id="btn-reset-flood" class="hidden items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold transition-colors border border-slate-600">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          <span>Reset</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Basin Quick Jump Bar -->
+  <div class="bg-slate-900/90 border-b border-slate-800 px-4 py-1.5 text-xs text-slate-400">
+    <div class="max-w-7xl mx-auto flex items-center justify-between overflow-x-auto gap-3 whitespace-nowrap">
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500 font-semibold uppercase text-[10px] tracking-wider flex items-center gap-1">
+          <i data-lucide="map-pin" class="w-3 h-3 text-cyan-400"></i> Active Basins:
+        </span>
+        <button onclick="focusBasin('all')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] border border-slate-700">Pan-India (All)</button>
+        <button onclick="focusBasin('yamuna')" class="px-2 py-0.5 rounded bg-red-950/70 hover:bg-red-900/80 text-red-300 text-[11px] border border-red-800/60 font-medium">Yamuna / NCR (Severe 88%)</button>
+        <button onclick="focusBasin('brahmaputra')" class="px-2 py-0.5 rounded bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 text-[11px] border border-amber-800/60 font-medium">Brahmaputra / Assam (Mod 62%)</button>
+        <button onclick="focusBasin('ganges')" class="px-2 py-0.5 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 text-[11px] border border-emerald-800/60 font-medium">Ganges / Bihar (Safe 24%)</button>
+        <button onclick="focusBasin('godavari')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] border border-slate-700">Godavari & Mahanadi</button>
+      </div>
+      <div class="flex items-center gap-3 text-[11px] text-slate-400">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-sm bg-red-500"></span> Severe (&gt;85%)
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-sm bg-amber-500"></span> Moderate (50-85%)
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span> Safe (&lt;50%)
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN DASHBOARD CONTENT (Grid Layout) -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 md:p-4 grid grid-cols-12 gap-4">
+    
+    <!-- 2. CENTRAL HIGH-PRECISION GIS MAP (Main Focal Point - Col 12 / Lg 8) -->
+    <section class="col-span-12 lg:col-span-8 flex flex-col bg-[#1E293B] rounded-xl border border-slate-700/80 overflow-hidden shadow-xl min-h-[480px] lg:min-h-[580px] relative">
+      <!-- Map Header: Title, Basemap Switcher & Quick-Fly Pills -->
+      <div class="px-4 py-2 bg-slate-850 border-b border-slate-700/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 z-10">
+        <div class="flex items-center gap-2 flex-wrap">
+          <i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i>
+          <h2 id="map-header-title" class="text-sm font-bold text-white tracking-wide">
+            Interactive High-Resolution Hydro-GIS Map
+          </h2>
+          <!-- Basemap Switcher Segmented Control -->
+          <div class="inline-flex rounded-lg bg-slate-900/90 p-0.5 border border-slate-700/90 text-xs">
+            <button id="bm-dark-btn" onclick="setBasemap('dark')" class="px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm" title="High-contrast tactical dark canvas">
+              🗺️ Tactical Dark
+            </button>
+            <button id="bm-sat-btn" onclick="setBasemap('sat')" class="px-2.5 py-0.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all" title="High-resolution orbital satellite photography">
+              🛰️ Satellite SAR
+            </button>
+            <button id="bm-topo-btn" onclick="setBasemap('topo')" class="px-2.5 py-0.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all" title="Topographical contour and drainage relief">
+              ⛰️ Topo Relief
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Basin & Geography Fly-To Buttons -->
+        <div class="flex items-center gap-1 flex-wrap text-xs">
+          <span class="text-[10px] text-slate-400 uppercase font-mono hidden md:inline">Fly To:</span>
+          <button onclick="focusBasin('all')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] border border-slate-700 transition-colors" title="Pan-India Overview">
+            🇮🇳 India
+          </button>
+          <button onclick="focusBasin('himalayas')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 text-[11px] border border-sky-900/60 transition-colors" title="Zoom to Himalayas, Indus & Northern Headwaters">
+            🏔️ Himalayas & Indus
+          </button>
+          <button onclick="focusBasin('yamuna')" class="px-2 py-0.5 rounded bg-red-950/80 hover:bg-red-900 text-red-300 text-[11px] border border-red-800/80 font-bold transition-colors" title="Zoom to Yamuna NCR Severe Inundation">
+            🔴 Yamuna (NCR)
+          </button>
+          <button onclick="focusBasin('ganges')" class="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-[11px] border border-emerald-800/80 font-bold transition-colors" title="Zoom to Indo-Gangetic Alluvial Plain">
+            🌾 Gangetic Plain
+          </button>
+          <button onclick="focusBasin('brahmaputra')" class="px-2 py-0.5 rounded bg-amber-950/80 hover:bg-amber-900 text-amber-300 text-[11px] border border-amber-800/80 font-bold transition-colors" title="Zoom to Assam Brahmaputra & NE Hills">
+            🟠 Assam NE
+          </button>
+          <button onclick="focusBasin('deccan')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] border border-slate-700 transition-colors" title="Zoom to Deccan Plateau, Godavari & Krishna">
+            🌊 Deccan Basins
+          </button>
+          <button onclick="focusBasin('ghats')" class="px-2 py-0.5 rounded bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-300 text-[11px] border border-emerald-700/50 transition-colors" title="Zoom to Western Ghats & Coastal Malabar">
+            🌴 Western Ghats
+          </button>
+        </div>
+      </div>
+
+      <!-- Leaflet Map Container -->
+      <div class="relative flex-1 w-full h-[420px] lg:h-[520px]">
+        <div id="gis-map" class="w-full h-full bg-[#0F172A]"></div>
+
+        <!-- Floating Layer Controls Panel (Top Right of Map) -->
+        <div class="absolute top-3 right-3 z-[1000] bg-slate-900/94 backdrop-blur-md border border-slate-700/90 rounded-lg p-2.5 text-xs shadow-2xl w-64 text-slate-200">
+          <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700/80">
+            <span class="font-bold flex items-center gap-1.5 text-cyan-400">
+              <i data-lucide="sliders" class="w-3.5 h-3.5"></i> India GIS Layers
+            </span>
+            <span class="text-[9px] text-cyan-400 font-mono font-bold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/50">4 LAYERS</span>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="flex items-center justify-between cursor-pointer group py-0.5">
+              <span class="flex items-center gap-1.5 text-slate-300 group-hover:text-white text-[11px]">
+                <i data-lucide="waves" class="w-3 h-3 text-cyan-400"></i> Major Rivers & Names
+              </span>
+              <input type="checkbox" id="layer-rivers" checked class="rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-0 cursor-pointer" />
+            </label>
+
+            <label class="flex items-center justify-between cursor-pointer group py-0.5">
+              <span class="flex items-center gap-1.5 text-slate-300 group-hover:text-white text-[11px]">
+                <i data-lucide="map" class="w-3 h-3 text-sky-400"></i> 12 CWC National Basins
+              </span>
+              <input type="checkbox" id="layer-basins" checked class="rounded bg-slate-800 border-slate-600 text-sky-500 focus:ring-0 cursor-pointer" />
+            </label>
+
+            <label class="flex items-center justify-between cursor-pointer group py-0.5">
+              <span class="flex items-center gap-1.5 text-slate-300 group-hover:text-white text-[11px]">
+                <i data-lucide="database" class="w-3 h-3 text-blue-400"></i> Major Dams & Barrages
+              </span>
+              <input type="checkbox" id="layer-dams" checked class="rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-0 cursor-pointer" />
+            </label>
+
+            <label class="flex items-center justify-between cursor-pointer group py-0.5">
+              <span class="flex items-center gap-1.5 text-slate-300 group-hover:text-white text-[11px]">
+                <i data-lucide="tent" class="w-3 h-3 text-emerald-400"></i> Evac Corridors & Shelters
+              </span>
+              <input type="checkbox" id="layer-evac" checked class="rounded bg-slate-800 border-slate-600 text-emerald-500 focus:ring-0 cursor-pointer" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Floating Map Legend & Stats Overlay (Bottom Left of Map) -->
+        <div class="absolute bottom-3 left-3 z-[1000] bg-slate-900/94 backdrop-blur-md border border-slate-700/80 rounded-lg p-2.5 text-[11px] shadow-2xl text-slate-300 max-w-[270px]">
+          <div class="font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+              <span>National Hydrological GIS</span>
+            </span>
+            <span id="active-layers-count" class="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 font-mono border border-slate-700">4 Layers Active</span>
+          </div>
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2.5 h-1 rounded bg-cyan-400"></span>
+                <span>Major River Flow Arteries</span>
+              </span>
+              <span class="text-cyan-300 font-mono text-[10px]">22 Rivers</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2 rounded bg-sky-500/40 border border-sky-400"></span>
+                <span>National Basins</span>
+              </span>
+              <span class="text-sky-300 font-mono text-[10px]">12 CWC</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded bg-blue-500 border border-white"></span>
+                <span>Major Dams & Barrages</span>
+              </span>
+              <span class="text-blue-300 font-mono text-[10px]">14 Dams</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 border border-white"></span>
+                <span>Evacuation Shelters & Corridors</span>
+              </span>
+              <span class="text-emerald-300 font-mono text-[10px]">Safe Camps</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Live Telemetry & Coordinates HUD Footer -->
+      <div class="px-4 py-2 bg-slate-850 border-t border-slate-700/80 text-xs text-slate-400 flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+            <span id="gis-coords-hud" class="font-mono text-cyan-300 font-semibold text-[11px]">
+              LAT: 28.6635° N | LON: 77.2512° E | ELEV: 207m ASL (Delhi NCR)
+            </span>
+          </div>
+          <span class="text-slate-600 hidden sm:inline">|</span>
+          <span class="text-slate-300 text-[11px]">
+            🌊 Monitored Streamflow: <strong class="text-cyan-300 font-mono">1,420,000 cusecs</strong>
+          </span>
+        </div>
+        <div class="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+          <span class="text-emerald-400 flex items-center gap-1 font-semibold">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            412 CWC Nodes Synced
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. RIGHT-SIDE ANALYTICS PANEL (Col 12 / Lg 4) -->
+    <section class="col-span-12 lg:col-span-4 flex flex-col gap-3.5">
+      
+      <!-- Card A: Predictive AI Risk Score Card -->
+      <div id="risk-score-card" class="bg-[#1E293B] rounded-xl border border-red-500/60 p-4 shadow-xl relative overflow-hidden transition-all duration-500">
+        <!-- Ambient radial glow -->
+        <div id="risk-glow-effect" class="absolute -top-12 -right-12 w-36 h-36 bg-red-500/20 rounded-full blur-2xl pointer-events-none"></div>
+
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="brain-circuit" class="w-4 h-4 text-red-400"></i>
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Predictive AI Risk Score
+            </span>
+          </div>
+          <span id="risk-badge" class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-red-500/20 border border-red-500 text-red-300 animate-pulse">
+            CRITICAL SEVERE
+          </span>
+        </div>
+
+        <div class="flex items-baseline justify-between mt-1">
+          <div>
+            <div class="flex items-baseline gap-1">
+              <span id="metric-risk-val" class="text-4xl lg:text-5xl font-extrabold text-red-400 tracking-tight transition-all">
+                88%
+              </span>
+              <span class="text-xs text-red-300/80 font-bold uppercase">Probability</span>
+            </div>
+            <p id="risk-metric-sub" class="text-xs text-slate-400 mt-1 font-medium">
+              Flood Probability (Next 24h Horizon)
+            </p>
+          </div>
+
+          <!-- Circular visual meter preview -->
+          <div class="relative w-14 h-14 flex items-center justify-center">
+            <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+              <path class="text-slate-700" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path id="circle-risk-path" class="text-red-500 transition-all duration-700" stroke-dasharray="88, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <i data-lucide="shield-alert" class="w-5 h-5 text-red-400 absolute"></i>
+          </div>
+        </div>
+
+        <div class="mt-3 pt-2.5 border-t border-slate-700/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+          <span>Model: DeepLSTM-Hydra Ensemble</span>
+          <span class="text-emerald-400">Conf: 94.2%</span>
+        </div>
+      </div>
+
+      <!-- Card B: Telemetry Metrics (Visual Progress Cards) -->
+      <div class="bg-[#1E293B] rounded-xl border border-slate-700/80 p-4 shadow-xl flex flex-col gap-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-700/80">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <i data-lucide="activity" class="w-4 h-4 text-cyan-400"></i> Real-Time Telemetry Metrics
+          </span>
+          <span class="text-[10px] text-cyan-400 font-mono">CWC / IMD DWR</span>
+        </div>
+
+        <!-- Metric 1: Rainfall Rate -->
+        <div class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700/70">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-slate-300 font-medium flex items-center gap-1.5">
+              <i data-lucide="cloud-lightning" class="w-3.5 h-3.5 text-cyan-400"></i> Rainfall Rate
+            </span>
+            <span id="val-rainfall" class="font-bold text-red-400 font-mono text-sm">112 mm/hr</span>
+          </div>
+          <!-- Progress bar -->
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div id="bar-rainfall" class="bg-gradient-to-r from-amber-500 to-red-500 h-2 rounded-full transition-all duration-500" style="width: 78%"></div>
+          </div>
+          <div class="flex justify-between items-center mt-1 text-[10px]">
+            <span class="text-slate-400">Classification</span>
+            <span id="badge-rainfall" class="text-red-400 font-semibold uppercase">Heavy Rain Warning</span>
+          </div>
+        </div>
+
+        <!-- Metric 2: River Level vs Danger Level -->
+        <div class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700/70">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-slate-300 font-medium flex items-center gap-1.5">
+              <i data-lucide="waves" class="w-3.5 h-3.5 text-blue-400"></i> River Level vs Danger Mark
+            </span>
+            <span id="val-river" class="font-bold text-red-400 font-mono text-sm">+2.4m Above Danger</span>
+          </div>
+          <!-- Progress bar -->
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div id="bar-river" class="bg-red-500 h-2 rounded-full transition-all duration-500" style="width: 86%"></div>
+          </div>
+          <div class="flex justify-between items-center mt-1 text-[10px]">
+            <span class="text-slate-400">Yamuna Gauge: 207.73m</span>
+            <span class="text-slate-400 font-mono">Danger Threshold: 205.33m</span>
+          </div>
+        </div>
+
+        <!-- Metric 3: Soil Saturation -->
+        <div class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700/70">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-slate-300 font-medium flex items-center gap-1.5">
+              <i data-lucide="droplet" class="w-3.5 h-3.5 text-amber-400"></i> Catchment Soil Saturation
+            </span>
+            <span id="val-soil" class="font-bold text-amber-400 font-mono text-sm">94%</span>
+          </div>
+          <!-- Progress bar -->
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div id="bar-soil" class="bg-gradient-to-r from-blue-500 to-amber-500 h-2 rounded-full transition-all duration-500" style="width: 94%"></div>
+          </div>
+          <div class="flex justify-between items-center mt-1 text-[10px]">
+            <span class="text-slate-400">Runoff Coefficient: 0.91</span>
+            <span id="badge-soil" class="text-amber-400 font-semibold">Near Full Capacity</span>
+          </div>
+        </div>
+
+        <!-- Catchment Inflow Stat -->
+        <div class="flex items-center justify-between text-xs px-1 text-slate-400">
+          <span>Hathnikund Barrage Discharge:</span>
+          <span id="val-barrage" class="font-mono font-bold text-red-400">3,52,400 Cusecs</span>
+        </div>
+      </div>
+
+      <!-- Card C: 24h Hydrograph Chart (Chart.js) -->
+      <div class="bg-[#1E293B] rounded-xl border border-slate-700/80 p-3.5 shadow-xl">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <i data-lucide="trending-up" class="w-3.5 h-3.5 text-indigo-400"></i> Hydrograph Stage &amp; Forecast
+          </span>
+          <span class="text-[10px] text-slate-400 font-mono">T-12h to T+12h</span>
+        </div>
+        <div class="relative h-28 w-full">
+          <canvas id="hydrograph-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Card D: Live API Integration Status Pills -->
+      <div class="bg-[#1E293B] rounded-xl border border-slate-700/80 p-3 shadow-xl">
+        <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+          <i data-lucide="radio" class="w-3 h-3 text-emerald-400"></i> Live Data Feed Mesh Status
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="px-2 py-1.5 rounded-lg bg-slate-900/90 border border-emerald-500/40 text-emerald-400 flex flex-col items-center">
+            <div class="flex items-center gap-1 text-[11px] font-bold">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> IMD API
+            </div>
+            <span class="text-[9px] text-slate-400 font-mono">18ms • Live</span>
+          </div>
+
+          <div class="px-2 py-1.5 rounded-lg bg-slate-900/90 border border-emerald-500/40 text-emerald-400 flex flex-col items-center">
+            <div class="flex items-center gap-1 text-[11px] font-bold">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ISRO Bhuvan
+            </div>
+            <span class="text-[9px] text-slate-400 font-mono">RISAT-1B SAR</span>
+          </div>
+
+          <div class="px-2 py-1.5 rounded-lg bg-slate-900/90 border border-emerald-500/40 text-emerald-400 flex flex-col items-center">
+            <div class="flex items-center gap-1 text-[11px] font-bold">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> CWC Sensors
+            </div>
+            <span class="text-[9px] text-slate-400 font-mono">412/412 Mesh</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 4. BOTTOM BROADCAST LOG PANEL (Full Width - Col 12) -->
+    <section class="col-span-12 bg-[#1E293B] rounded-xl border border-slate-700/80 p-4 shadow-2xl flex flex-col gap-3">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-700/80">
+        <div class="flex items-center gap-2">
+          <div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></div>
+          <div>
+            <h3 id="terminal-header-title" class="text-sm font-bold text-white flex items-center gap-2">
+              National Emergency Early Warning Broadcast Terminal (CAP v1.2 Protocol)
+            </h3>
+            <p class="text-[11px] text-slate-400">
+              Direct Automated SMS / WhatsApp / Siren Gateways to District Magistrates, SDMAs, and NDMA Nodal Officers
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 self-end sm:self-auto">
+          <button id="btn-clear-terminal" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition-colors">
+            Clear Feed
+          </button>
+          <button id="btn-trigger-dispatch" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white text-xs font-bold transition-all shadow-md shadow-cyan-900/30 border border-cyan-400/60 cursor-pointer">
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+            <span id="btn-dispatch-text">Trigger Emergency Test Dispatch</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Chips -->
+      <div class="flex items-center gap-2 text-xs text-slate-400 overflow-x-auto pb-1">
+        <span class="text-[11px] font-semibold text-slate-500 uppercase">Filters:</span>
+        <button onclick="filterLogs('all')" class="log-filter-btn active px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[11px] font-medium">All Feeds</button>
+        <button onclick="filterLogs('CAP')" class="log-filter-btn px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[11px] hover:bg-slate-700">CAP Alerts (Red)</button>
+        <button onclick="filterLogs('SMS')" class="log-filter-btn px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[11px] hover:bg-slate-700">District SMS Gateways</button>
+        <button onclick="filterLogs('WHATSAPP')" class="log-filter-btn px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[11px] hover:bg-slate-700">Citizen WhatsApp</button>
+      </div>
+
+      <!-- Terminal Output Window -->
+      <div id="broadcast-terminal" class="bg-[#090D16] border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-300 h-48 overflow-y-auto space-y-2 select-text shadow-inner">
+        <!-- Initial log entries -->
+        <div class="log-item flex items-start gap-2 border-b border-slate-800/60 pb-1.5" data-tag="CAP">
+          <span class="text-slate-500 shrink-0 font-semibold">[09:14:02 IST]</span>
+          <span class="px-1.5 py-0.2 rounded bg-red-950 text-red-400 border border-red-800/80 text-[10px] font-bold shrink-0">CAP-ALERT</span>
+          <span class="text-slate-300">
+            <span class="text-red-300 font-semibold">[DEOC-NCR-04]</span> Red Alert broadcast dispatched to Delhi Disaster Management Authority (DDMA) &amp; DC East Delhi. Yamuna level 207.73m exceeding danger threshold (205.33m).
+          </span>
+          <span class="ml-auto text-emerald-400 text-[10px] shrink-0 font-bold">✓ ACKNOWLEDGED</span>
+        </div>
+
+        <div class="log-item flex items-start gap-2 border-b border-slate-800/60 pb-1.5" data-tag="SMS">
+          <span class="text-slate-500 shrink-0 font-semibold">[09:12:45 IST]</span>
+          <span class="px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-800/80 text-[10px] font-bold shrink-0">SMS-GATEWAY</span>
+          <span class="text-slate-300">
+            <span class="text-amber-300 font-semibold">[TELECOM-AIRTEL/JIO]</span> Mass broadcast initiated to 48,200 cell towers in low-lying floodplains of Yamuna (Wazirabad, Mayur Vihar, Old Railway Bridge). Evacuation advisory transmitted.
+          </span>
+          <span class="ml-auto text-emerald-400 text-[10px] shrink-0 font-bold">✓ SENT (99.4%)</span>
+        </div>
+
+        <div class="log-item flex items-start gap-2 border-b border-slate-800/60 pb-1.5" data-tag="WHATSAPP">
+          <span class="text-slate-500 shrink-0 font-semibold">[09:10:19 IST]</span>
+          <span class="px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/80 text-[10px] font-bold shrink-0">WHATSAPP-API</span>
+          <span class="text-slate-300">
+            <span class="text-emerald-300 font-semibold">[META-NDMA-BOT]</span> 14,890 automated multi-lingual warning voice/text cards dispatched to registered Gram Panchayats across Sonitpur and Kaziranga (Assam Brahmaputra basin).
+          </span>
+          <span class="ml-auto text-emerald-400 text-[10px] shrink-0 font-bold">✓ DELIVERED</span>
+        </div>
+
+        <div class="log-item flex items-start gap-2" data-tag="CAP">
+          <span class="text-slate-500 shrink-0 font-semibold">[09:08:00 IST]</span>
+          <span class="px-1.5 py-0.2 rounded bg-blue-950 text-blue-400 border border-blue-800/80 text-[10px] font-bold shrink-0">ISRO-SAR</span>
+          <span class="text-slate-300">
+            <span class="text-cyan-300 font-semibold">[BHUVAN-INGEST]</span> RISAT-1B SAR Flood Inundation polygon processed: 114 sq km temporary inundation detected in North Assam valley. GeoTIFF vector published to GIS hub.
+          </span>
+          <span class="ml-auto text-cyan-400 text-[10px] shrink-0 font-bold">● INGESTED</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between text-[11px] text-slate-500 font-mono pt-1">
+        <span class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Gateway Nodes: NDMA-PDC-01, NIC-Meghraj, Airtel Cell Broadcast Core
+        </span>
+        <span id="log-count-indicator">4 Log Entries Displayed</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="w-full bg-slate-900 border-t border-slate-800 px-4 py-3 text-xs text-slate-400 mt-auto">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-slate-300">EvacNOW System</span>
+        <span>• National Flood Early Warning & Evacuation Network</span>
+        <span class="hidden sm:inline text-slate-500">| Integrated NDMA-CWC Framework</span>
+      </div>
+      <div class="flex items-center gap-3 text-[11px] text-slate-500">
+        <span>CWC Telemetry</span>
+        <span>•</span>
+        <span>IMD Doppler Weather Radar</span>
+        <span>•</span>
+        <span>ISRO Bhuvan SAR</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- APPLICATION LOGIC SCRIPT -->
+  <script>
+    // --- 1. Audio Synthesizer for Emergency Warning Tone ---
+    let audioCtx = null;
+    let audioMuted = false;
+
+    function playTone(freq, duration, type = 'sine') {
+      if (audioMuted) return;
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        console.warn("Web Audio not allowed without user gesture:", e);
+      }
+    }
+
+    function playEmergencyAlarm() {
+      if (audioMuted) return;
+      playTone(880, 0.25, 'sawtooth');
+      setTimeout(() => playTone(660, 0.35, 'sawtooth'), 260);
+      setTimeout(() => playTone(880, 0.25, 'sawtooth'), 620);
+    }
+
+    function playDispatchPing() {
+      if (audioMuted) return;
+      playTone(1046.5, 0.15, 'sine');
+      setTimeout(() => playTone(1318.5, 0.2, 'sine'), 120);
+    }
+
+    // --- 2. Live IST / UTC Clock ---
+    function updateClock() {
+      const now = new Date();
+      const istOptions = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+      const istString = now.toLocaleTimeString('en-GB', istOptions);
+      const clockEl = document.getElementById('utc-clock');
+      if (clockEl) {
+        clockEl.textContent = `${istString} IST`;
+      }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // --- 3. Multi-Lingual Translation Dictionary ---
+    const translations = {
+      en: {
+        title: "EvacNOW",
+        subtitle: "National Flood Risk Command Center • Pan-India Basin Operations",
+        statusText: "● IMD, ISRO Bhuvan & CWC Feeds Online — Sync 1 Min Ago",
+        simulateBtn: "Simulate Critical Flood Level (>85% Risk)",
+        mapHeader: "Interactive High-Resolution Hydro-GIS Map",
+        riskProbability: "88% Flood Probability (Next 24h)",
+        rainfallWarn: "Heavy Rain Warning",
+        soilCapacity: "Near Full Capacity",
+        terminalHeader: "National Emergency Early Warning Broadcast Terminal (CAP v1.2 Protocol)",
+        dispatchBtn: "Trigger Emergency Test Dispatch"
+      },
+      hi: {
+        title: "इवैकनाउ (EvacNOW)",
+        subtitle: "राष्ट्रीय बाढ़ चेतावनी कमान केंद्र • अखिल भारतीय बेसिन संचालन",
+        statusText: "● आईएमडी, इसरो भुवन एवं सीडब्ल्यूसी फीड्स सक्रिय — 1 मिनट पूर्व सिंक",
+        simulateBtn: "गंभीर बाढ़ स्तर का अनुकरण करें (>85% जोखिम)",
+        mapHeader: "इंटरएक्टिव उच्च-सटीकता हाइड्रोलॉजिकल जीआईएस मानचित्र",
+        riskProbability: "88% बाढ़ की संभावना (आगामी 24 घंटे)",
+        rainfallWarn: "अत्यधिक भारी वर्षा की चेतावनी",
+        soilCapacity: "मृदा संतृप्ति चरम सीमा पर",
+        terminalHeader: "राष्ट्रीय आपातकालीन प्रसारण टर्मिनल (CAP v1.2 प्रोटोकॉल)",
+        dispatchBtn: "आपातकालीन परीक्षण संदेश भेजें"
+      },
+      bn: {
+        title: "ইভ্যাকনাউ (EvacNOW)",
+        subtitle: "জাতীয় বন্যা ঝুঁকি কমান্ড সেন্টার • সর্বভারতীয় অববাহিকা পর্যবেক্ষণ",
+        statusText: "● আইএমডি, ইসরো ভুবন এবং সিডব্লিউসি সংযোগ সক্রিয় — ১ মিনিট পূর্বে সিঙ্ক",
+        simulateBtn: "মারাত্মক বন্যা স্তর অনুকরণ করুন (>৮৫% ঝুঁকি)",
+        mapHeader: "ইন্টারেক্টিভ হাই-রেজোলিউশন হাইড্রো-জিআইএস মানচিত্র",
+        riskProbability: "৮৮% বন্যার সম্ভাবনা (পরবর্তী ২৪ ঘণ্টা)",
+        rainfallWarn: "ভারী বৃষ্টির সতর্কবার্তা",
+        soilCapacity: "মাটি প্রায় সম্পূর্ণ স্যাচুরেটেড",
+        terminalHeader: "জাতীয় জরুরি প্রাথমিক সতর্কবার্তা সম্প্রচার টার্মিনাল (CAP v1.2)",
+        dispatchBtn: "জরুরি টেস্ট বার্তা প্রেরণ করুন"
+      }
+    };
+
+    let currentLang = 'en';
+    document.getElementById('lang-selector').addEventListener('change', (e) => {
+      currentLang = e.target.value;
+      const dict = translations[currentLang] || translations.en;
+      document.getElementById('nav-subtitle').textContent = dict.subtitle;
+      document.getElementById('nav-status-text').textContent = dict.statusText;
+      document.getElementById('btn-simulate-text').textContent = dict.simulateBtn;
+      document.getElementById('map-header-title').textContent = dict.mapHeader;
+      document.getElementById('terminal-header-title').textContent = dict.terminalHeader;
+      document.getElementById('btn-dispatch-text').textContent = dict.dispatchBtn;
+    });
+
+    // --- 4. Leaflet High-Precision Tactical GIS Map Initialization ---
+    // Centered on India: [22.5937, 78.9629], zoom 5
+    const map = L.map('gis-map', {
+      center: [22.5937, 78.9629],
+      zoom: 5,
+      minZoom: 4,
+      maxZoom: 16,
+      zoomControl: true,
+      attributionControl: false
+    });
+
+    // Basemap Layers (Esri high-resolution CDN tiles - clean, robust, no watermark)
+    const darkBaseTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16,
+      attribution: 'Esri, DeLorme, NAVTEQ, © OpenStreetMap'
+    });
+    const darkRefTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16,
+      opacity: 0.9
+    });
+
+    const satBaseTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 17,
+      attribution: 'Esri, Maxar, Earthstar Geographics'
+    });
+    const satRefTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 17,
+      opacity: 0.95
+    });
+
+    const topoTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16,
+      attribution: 'Esri, HERE, Garmin, Intermap'
+    });
+
+    // Default to Tactical Dark
+    darkBaseTiles.addTo(map);
+    darkRefTiles.addTo(map);
+
+    let activeBasemapType = 'dark';
+    function setBasemap(type) {
+      activeBasemapType = type;
+      // Remove all basemaps
+      map.removeLayer(darkBaseTiles);
+      map.removeLayer(darkRefTiles);
+      map.removeLayer(satBaseTiles);
+      map.removeLayer(satRefTiles);
+      map.removeLayer(topoTiles);
+
+      const darkBtn = document.getElementById('bm-dark-btn');
+      const satBtn = document.getElementById('bm-sat-btn');
+      const topoBtn = document.getElementById('bm-topo-btn');
+
+      [darkBtn, satBtn, topoBtn].forEach(btn => {
+        if (btn) {
+          btn.className = "px-2.5 py-0.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all";
+        }
+      });
+
+      if (type === 'sat') {
+        satBaseTiles.addTo(map);
+        satRefTiles.addTo(map);
+        if (satBtn) satBtn.className = "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm";
+      } else if (type === 'topo') {
+        topoTiles.addTo(map);
+        if (topoBtn) topoBtn.className = "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm";
+      } else {
+        darkBaseTiles.addTo(map);
+        darkRefTiles.addTo(map);
+        if (darkBtn) darkBtn.className = "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm";
+      }
+    }
+
+    // High-Tech Feature Layer Groups (Focused National GIS Topology)
+    const riverFlowGroup = L.layerGroup().addTo(map);
+    const basinPolygonGroup = L.layerGroup().addTo(map);
+    const damsGroup = L.layerGroup().addTo(map);
+    const evacGroup = L.layerGroup().addTo(map);
+
+    // ==========================================
+    // --- 1. PAN-INDIA LIVING RIVER NETWORKS ---
+    // ==========================================
+    const indianRivers = [
+      // Northern & Indus River System
+      {
+        name: "Indus River (Ladakh Trans-Himalayan Channel)",
+        coords: [[35.20, 75.60], [34.50, 76.80], [34.15, 77.58], [33.80, 78.40], [33.20, 79.10]],
+        color: "#38BDF8", weight: 3.5, className: "river-flow-normal",
+        tooltip: "🏔️ Indus River Mainstem: Glacial Melt Runoff Stable (Leh Valley)"
+      },
+      {
+        name: "Jhelum River (Kashmir Valley Drainage)",
+        coords: [[33.55, 75.25], [33.80, 75.05], [34.08, 74.80], [34.28, 74.45], [34.20, 74.15]],
+        color: "#06B6D4", weight: 3.0, className: "river-flow-normal",
+        tooltip: "💧 Jhelum River: Srinagar & Wular Lake Gauge Stable"
+      },
+      {
+        name: "Chenab River (Kishtwar to Akhnoor)",
+        coords: [[33.32, 75.78], [33.15, 75.50], [33.05, 75.10], [32.90, 74.74]],
+        color: "#06B6D4", weight: 3.5, className: "river-flow-normal",
+        tooltip: "💧 Chenab River: Salal & Baglihar Hydro Outflows Monitored"
+      },
+      {
+        name: "Sutlej River & Beas System",
+        coords: [[31.85, 78.60], [31.55, 77.40], [31.41, 76.43], [31.25, 75.75], [31.17, 74.98]],
+        color: "#0EA5E9", weight: 4.0, className: "river-flow-normal",
+        tooltip: "💧 Sutlej River: Bhakra Dam Inflow Normal (78% storage)"
+      },
+
+      // Gangetic System & Yamuna NCR
+      {
+        name: "Yamuna River (NCR Core Threat Zone)",
+        coords: [
+          [30.40, 77.58], [30.15, 77.35], [29.80, 77.10], [29.39, 77.05],
+          [28.95, 77.15], [28.72, 77.23], [28.6635, 77.2512], [28.55, 77.30],
+          [28.32, 77.52], [27.85, 77.68], [27.49, 77.67], [27.18, 78.02],
+          [26.50, 79.25], [25.44, 81.88]
+        ],
+        color: "#EF4444", weight: 5.0, className: "river-flow-severe",
+        tooltip: "🚨 Yamuna River: CRITICAL STAGE (+2.4m above danger mark @ Old Railway Bridge, Delhi)"
+      },
+      {
+        name: "Ganges (Ganga) Mainstem",
+        coords: [
+          [30.15, 78.30], [29.95, 78.16], [28.45, 79.50], [27.15, 80.80], [26.46, 80.35],
+          [25.44, 81.88], [25.31, 83.00], [25.62, 85.18], [25.28, 87.05],
+          [24.80, 87.92], [23.80, 88.20], [22.50, 88.35], [21.75, 88.10]
+        ],
+        color: "#06B6D4", weight: 4.5, className: "river-flow-normal",
+        tooltip: "🌊 Ganges River Mainstem: Steady Discharge passing Patna towards Farakka Barrage"
+      },
+      {
+        name: "Ghaghara (Sarayu) River",
+        coords: [[28.50, 81.00], [27.40, 81.60], [26.79, 82.20], [26.10, 83.50], [25.78, 84.73]],
+        color: "#F59E0B", weight: 3.5, className: "river-flow-moderate",
+        tooltip: "⚡ Ghaghara River: High Monsoon Discharge into Ganga at Chhapra"
+      },
+      {
+        name: "Kosi River (North Bihar Flood Basin)",
+        coords: [[26.88, 87.15], [26.40, 86.95], [26.12, 86.60], [25.75, 86.85], [25.42, 87.25]],
+        color: "#F59E0B", weight: 4.0, className: "river-flow-moderate",
+        tooltip: "⚡ Kosi River: Active Shifting Alluvial Fan | Siltation Alert"
+      },
+      {
+        name: "Chambal River (Vindhya to Yamuna)",
+        coords: [[22.80, 75.70], [24.50, 75.60], [25.18, 75.83], [25.90, 76.60], [26.49, 79.25]],
+        color: "#0284C7", weight: 3.2, className: "river-flow-normal",
+        tooltip: "💧 Chambal River: Gandhi Sagar & Kota Barrage Cascade Regulated"
+      },
+      {
+        name: "Son River (Central Highlands)",
+        coords: [[22.75, 81.75], [23.80, 81.40], [24.50, 82.50], [24.90, 84.18], [25.66, 84.88]],
+        color: "#0284C7", weight: 3.2, className: "river-flow-normal",
+        tooltip: "💧 Son River: Indrapuri Barrage regulated outflow to Ganga"
+      },
+      {
+        name: "Teesta River (Sikkim to Bengal Plain)",
+        coords: [[27.80, 88.65], [27.20, 88.50], [26.72, 88.42], [26.54, 88.72], [25.80, 89.65]],
+        color: "#F59E0B", weight: 3.2, className: "river-flow-moderate",
+        tooltip: "⚡ Teesta River: High Mountain Flash Inflow from Glacial Lakes"
+      },
+
+      // North-East & Brahmaputra System
+      {
+        name: "Brahmaputra (Siang / Tsangpo Entering Assam)",
+        coords: [
+          [28.80, 95.30], [28.10, 95.35], [27.80, 95.20], [27.48, 94.90], [26.90, 94.15],
+          [26.65, 93.30], [26.40, 92.50], [26.175, 91.688], [26.10, 90.60],
+          [25.95, 89.90]
+        ],
+        color: "#F59E0B", weight: 5.5, className: "river-flow-moderate",
+        tooltip: "🌊 Brahmaputra Mainstem: RISING RAPIDLY (+0.12 m/hr at Pandu Ghat, Guwahati)"
+      },
+      {
+        name: "Barak River (Surma-Kushiyara Valley)",
+        coords: [[25.10, 93.40], [24.85, 93.00], [24.80, 92.60], [24.88, 92.35]],
+        color: "#0EA5E9", weight: 3.0, className: "river-flow-normal",
+        tooltip: "💧 Barak River: Southern Assam & Cachar District Waterway"
+      },
+
+      // Central & Western Drainage
+      {
+        name: "Narmada River (Rift Valley to Arabian Sea)",
+        coords: [
+          [22.67, 81.75], [22.95, 80.90], [23.16, 79.95], [22.75, 77.72],
+          [22.25, 76.20], [21.83, 73.74], [21.70, 72.97], [21.60, 72.55]
+        ],
+        color: "#06B6D4", weight: 4.2, className: "river-flow-normal",
+        tooltip: "🌊 Narmada River: Sardar Sarovar Mega Reservoir (134.2m / 138.68m FRL)"
+      },
+      {
+        name: "Tapi (Tapti) River",
+        coords: [[21.90, 77.90], [21.45, 76.40], [21.05, 75.78], [21.15, 73.50], [21.17, 72.83]],
+        color: "#0284C7", weight: 3.5, className: "river-flow-normal",
+        tooltip: "💧 Tapi River: Ukai Dam Discharge Controlled for Surat City Safety"
+      },
+      {
+        name: "Sabarmati River (Aravalli to Khambhat)",
+        coords: [[24.60, 73.30], [23.60, 72.85], [23.02, 72.57], [22.50, 72.40], [22.25, 72.30]],
+        color: "#0EA5E9", weight: 3.0, className: "river-flow-normal",
+        tooltip: "💧 Sabarmati River: Dharoi Dam regulated level through Ahmedabad Riverfront"
+      },
+
+      // Peninsular East-Flowing Rivers
+      {
+        name: "Mahanadi River (Odisha Delta Drainage)",
+        coords: [
+          [20.50, 81.80], [21.10, 82.50], [21.50, 83.85], [20.90, 84.40],
+          [20.58, 84.62], [20.46, 85.88], [20.30, 86.60]
+        ],
+        color: "#06B6D4", weight: 4.0, className: "river-flow-normal",
+        tooltip: "🌊 Mahanadi Basin: Hirakud Dam Sluice Gates Regulated (5.8 BCM capacity)"
+      },
+      {
+        name: "Godavari River (Dakshin Ganga)",
+        coords: [
+          [19.93, 73.53], [19.99, 73.78], [19.88, 75.34], [19.09, 77.15],
+          [18.80, 79.50], [17.68, 81.25], [17.25, 81.65], [16.98, 81.78],
+          [16.70, 82.20]
+        ],
+        color: "#F59E0B", weight: 4.2, className: "river-flow-moderate",
+        tooltip: "🌊 Godavari Basin: Polavaram & Dowleswaram Barrage Monsoon Telemetry"
+      },
+      {
+        name: "Krishna River Basin Mainstem",
+        coords: [
+          [17.92, 73.66], [16.85, 74.57], [16.33, 75.88], [16.20, 76.50],
+          [16.08, 78.86], [16.57, 79.31], [16.51, 80.62], [15.80, 80.95]
+        ],
+        color: "#06B6D4", weight: 4.2, className: "river-flow-normal",
+        tooltip: "🌊 Krishna River: Almatti, Srisailam & Nagarjuna Sagar Cascade Healthy"
+      },
+      {
+        name: "Tungabhadra River (Krishna Tributary)",
+        coords: [[14.00, 75.60], [14.70, 75.80], [15.27, 76.39], [15.89, 78.20]],
+        color: "#0284C7", weight: 3.2, className: "river-flow-normal",
+        tooltip: "💧 Tungabhadra River: TB Dam (Hospet) Sluice Outflow Normal"
+      },
+      {
+        name: "Kaveri (Cauvery) River Delta System",
+        coords: [
+          [12.38, 75.49], [12.45, 75.90], [12.28, 77.17], [11.80, 77.80],
+          [11.20, 78.10], [10.80, 78.69], [10.83, 79.20], [11.14, 79.85]
+        ],
+        color: "#06B6D4", weight: 3.8, className: "river-flow-normal",
+        tooltip: "🌊 Kaveri River: Mettur Dam Stanley Reservoir & Grand Anicut Irrigation Delta"
+      },
+      {
+        name: "Periyar River (Kerala Western Ghats)",
+        coords: [[9.50, 77.20], [9.85, 76.97], [10.05, 76.60], [10.11, 76.35], [10.15, 76.20]],
+        color: "#06B6D4", weight: 3.2, className: "river-flow-normal",
+        tooltip: "💧 Periyar River: Idukki Arch Dam & Mullaperiyar Inflow Monitored"
+      }
+    ];
+
+    indianRivers.forEach(river => {
+      const line = L.polyline(river.coords, {
+        color: river.color,
+        weight: river.weight,
+        opacity: 0.92,
+        className: river.className
+      }).addTo(riverFlowGroup);
+
+      // Render river names clearly visible along the river course
+      const shortName = river.name.split('(')[0].trim();
+      line.bindTooltip(`🌊 ${shortName}`, {
+        permanent: false,
+        direction: 'center',
+        className: 'river-name-badge',
+        opacity: 0.95
+      });
+
+      // Interactive popup with detailed basin & hydrological status
+      line.bindPopup(`
+        <div class="p-1.5 min-w-[220px]">
+          <div class="flex items-center justify-between pb-1 mb-1.5 border-b border-slate-700">
+            <span class="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
+              🌊 ${river.name}
+            </span>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/60 font-bold">RIVER</span>
+          </div>
+          <div class="text-[11px] text-slate-300 space-y-1">
+            <div class="text-slate-200">${river.tooltip}</div>
+            <div class="text-[9.5px] text-slate-400 pt-1 border-t border-slate-800 font-mono">National Hydrological Network • CWC Monitored</div>
+          </div>
+        </div>
+      `);
+    });
+
+    // ===============================================
+    // --- 2. 12 CWC NATIONAL RIVER BASINS OF INDIA ---
+    // ===============================================
+    const cwcRiverBasins = [
+      {
+        name: "Ganga Basin",
+        area: "861,452 sq km",
+        states: "UP, Bihar, WB, Uttarakhand, Haryana, Delhi, MP, Rajasthan",
+        status: "ELEVATED (Yamuna & Kosi Corridors)",
+        color: "#EF4444",
+        coords: [
+          [31.2, 78.2], [30.5, 79.8], [28.8, 81.5], [27.5, 84.5], [26.8, 88.0],
+          [24.5, 88.8], [22.8, 88.2], [23.5, 84.0], [24.0, 79.0], [26.5, 75.8],
+          [28.5, 76.0], [30.4, 77.2]
+        ]
+      },
+      {
+        name: "Indus Basin (India)",
+        area: "321,289 sq km",
+        states: "J&K, Ladakh, Himachal Pradesh, Punjab",
+        status: "NORMAL REGULATED",
+        color: "#38BDF8",
+        coords: [
+          [35.8, 76.5], [34.5, 78.8], [32.8, 78.5], [31.5, 77.0], [31.0, 74.8],
+          [32.8, 74.5], [34.5, 74.2], [35.2, 75.0]
+        ]
+      },
+      {
+        name: "Brahmaputra & Barak Basin",
+        area: "194,413 sq km",
+        states: "Assam, Arunachal Pradesh, Meghalaya, Nagaland, Manipur",
+        status: "ALERT STAGE (Monsoon Surge)",
+        color: "#F59E0B",
+        coords: [
+          [29.0, 94.5], [28.5, 96.8], [27.2, 96.0], [24.8, 93.8], [24.2, 91.5],
+          [25.3, 89.8], [27.2, 89.2], [28.2, 92.0]
+        ]
+      },
+      {
+        name: "Godavari Basin",
+        area: "312,812 sq km",
+        states: "Maharashtra, Telangana, Andhra Pradesh, Chhattisgarh, Odisha",
+        status: "MODERATE MONITORING",
+        color: "#F59E0B",
+        coords: [
+          [20.5, 73.5], [21.8, 78.5], [21.0, 81.5], [19.0, 82.5], [16.8, 82.3],
+          [17.5, 80.0], [18.5, 75.5], [19.5, 73.5]
+        ]
+      },
+      {
+        name: "Krishna Basin",
+        area: "258,948 sq km",
+        states: "Maharashtra, Karnataka, Telangana, Andhra Pradesh",
+        status: "NORMAL STEADY",
+        color: "#06B6D4",
+        coords: [
+          [19.2, 74.0], [18.2, 76.5], [17.5, 80.0], [15.8, 81.0], [15.0, 78.5],
+          [14.0, 76.0], [16.0, 74.0], [18.0, 73.8]
+        ]
+      },
+      {
+        name: "Mahanadi Basin",
+        area: "141,589 sq km",
+        states: "Chhattisgarh, Odisha, Jharkhand",
+        status: "CONTROLLED DISCHARGE",
+        color: "#06B6D4",
+        coords: [
+          [22.5, 81.0], [23.0, 83.5], [22.0, 85.0], [20.5, 86.8], [19.8, 85.0],
+          [20.0, 82.5], [21.0, 81.0]
+        ]
+      },
+      {
+        name: "Narmada Basin",
+        area: "98,796 sq km",
+        states: "Madhya Pradesh, Gujarat, Maharashtra",
+        status: "NORMAL HIGH CAPACITY",
+        color: "#06B6D4",
+        coords: [
+          [23.2, 81.8], [23.4, 78.5], [22.5, 74.5], [21.6, 72.8], [21.4, 75.0],
+          [22.0, 78.0], [22.4, 81.5]
+        ]
+      },
+      {
+        name: "Tapi Basin",
+        area: "65,145 sq km",
+        states: "Maharashtra, Madhya Pradesh, Gujarat",
+        status: "SAFE DISCHARGE",
+        color: "#0284C7",
+        coords: [
+          [22.0, 78.2], [21.5, 75.5], [21.3, 72.7], [20.8, 73.8], [20.8, 76.5],
+          [21.6, 78.0]
+        ]
+      },
+      {
+        name: "Cauvery (Kaveri) Basin",
+        area: "81,155 sq km",
+        states: "Karnataka, Tamil Nadu, Kerala",
+        status: "NORMAL AGRICULTURAL FLOW",
+        color: "#10B981",
+        coords: [
+          [13.4, 75.5], [13.0, 77.8], [12.0, 79.5], [11.0, 79.8], [10.5, 78.5],
+          [11.0, 76.5], [12.0, 75.3]
+        ]
+      },
+      {
+        name: "Pennar Basin",
+        area: "55,213 sq km",
+        states: "Andhra Pradesh, Karnataka",
+        status: "NORMAL BASEFLOW",
+        color: "#06B6D4",
+        coords: [
+          [14.8, 77.2], [15.2, 79.5], [14.5, 80.2], [13.8, 80.0], [13.4, 77.8]
+        ]
+      },
+      {
+        name: "West Flowing Rivers (Western Ghats to Arabian Sea)",
+        area: "113,000 sq km",
+        states: "Maharashtra, Goa, Karnataka, Kerala",
+        status: "MONSOON RUNOFF HIGH",
+        color: "#059669",
+        coords: [
+          [19.5, 72.8], [16.5, 73.5], [12.5, 75.0], [8.5, 77.0], [9.5, 76.5],
+          [14.0, 74.5], [18.0, 73.0]
+        ]
+      },
+      {
+        name: "Mahi & Sabarmati Basins",
+        area: "60,000 sq km",
+        states: "Rajasthan, Gujarat, Madhya Pradesh",
+        status: "STABLE STORAGE",
+        color: "#38BDF8",
+        coords: [
+          [24.8, 73.5], [24.0, 74.8], [22.5, 73.5], [22.0, 72.5], [23.2, 72.0]
+        ]
+      }
+    ];
+
+    cwcRiverBasins.forEach(basin => {
+      const poly = L.polygon(basin.coords, {
+        color: basin.color,
+        weight: 1.5,
+        opacity: 0.65,
+        fillColor: basin.color,
+        fillOpacity: 0.08,
+        dashArray: "4, 6"
+      }).addTo(basinPolygonGroup);
+
+      poly.bindPopup(`
+        <div class="p-1.5">
+          <div class="flex items-center justify-between pb-1 mb-1 border-b border-slate-700">
+            <span class="text-xs font-bold text-sky-300 flex items-center gap-1">
+              🗺️ ${basin.name}
+            </span>
+            <span class="text-[9.5px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 font-mono border border-slate-700">CWC BASIN</span>
+          </div>
+          <div class="text-[11px] space-y-1 text-slate-300">
+            <div><strong class="text-slate-400">Catchment Area:</strong> <span class="text-white font-mono">${basin.area}</span></div>
+            <div><strong class="text-slate-400">States Covered:</strong> <span class="text-slate-200">${basin.states}</span></div>
+            <div class="pt-1 border-t border-slate-800 flex justify-between">
+              <span class="text-slate-400">Hydrological Status:</span>
+              <span class="font-bold text-cyan-300 font-mono">${basin.status}</span>
+            </div>
+          </div>
+        </div>
+      `);
+      poly.bindTooltip(`🗺️ ${basin.name} (${basin.area})`, { sticky: true });
+    });
+
+    // =====================================================
+    // --- 3. MAJOR RESERVOIRS, DAMS & MEGA BARRAGES OF INDIA ---
+    // =====================================================
+    const strategicDams = [
+      {
+        name: "Tehri Dam",
+        river: "Bhagirathi (Ganga)",
+        state: "Uttarakhand",
+        lat: 30.378, lng: 78.480,
+        height: "260.5m (Tallest in India)",
+        capacity: "3.54 BCM",
+        storagePct: "84%",
+        status: "SAFE BUFFER • Power Peak"
+      },
+      {
+        name: "Bhakra Nangal Dam",
+        river: "Sutlej River",
+        state: "Himachal Pradesh / Punjab",
+        lat: 31.410, lng: 76.435,
+        height: "226m (Concrete Gravity)",
+        capacity: "9.62 BCM (Gobind Sagar)",
+        storagePct: "78%",
+        status: "REGULATED OUTFLOW"
+      },
+      {
+        name: "Hathnikund Barrage",
+        river: "Yamuna River",
+        state: "Haryana / UP Border",
+        lat: 30.317, lng: 77.589,
+        height: "Weir Regulator",
+        capacity: "Peak: 3.52 Lakh cusecs",
+        storagePct: "92% Inflow",
+        status: "CRITICAL REGULATOR (NCR Inundation Source)"
+      },
+      {
+        name: "Sardar Sarovar Dam",
+        river: "Narmada River",
+        state: "Gujarat (Kevadia)",
+        lat: 21.830, lng: 73.748,
+        height: "138.68m FRL",
+        capacity: "9.46 BCM Live Storage",
+        storagePct: "89%",
+        status: "CONTROLLED CANAL DISCHARGE"
+      },
+      {
+        name: "Farakka Barrage",
+        river: "Ganges River",
+        state: "West Bengal",
+        lat: 24.805, lng: 87.923,
+        height: "2,240m Length (108 Gates)",
+        capacity: "Transboundary Sluice",
+        storagePct: "Normal",
+        status: "HOOGHLY & BANGLADESH DISCHARGE"
+      },
+      {
+        name: "Hirakud Dam",
+        river: "Mahanadi River",
+        state: "Odisha (Sambalpur)",
+        lat: 21.530, lng: 83.870,
+        height: "25.8 km (Longest Earthen)",
+        capacity: "5.8 BCM (Hirakud Lake)",
+        storagePct: "71%",
+        status: "DELTA FLOOD ABSORPTION READY"
+      },
+      {
+        name: "Nagarjuna Sagar Dam",
+        river: "Krishna River",
+        state: "Telangana / AP",
+        lat: 16.577, lng: 79.313,
+        height: "124m (Masonry Giant)",
+        capacity: "11.56 BCM",
+        storagePct: "68%",
+        status: "NORMAL IRRIGATION HEAD"
+      },
+      {
+        name: "Srisailam Dam",
+        river: "Krishna River",
+        state: "Andhra Pradesh",
+        lat: 16.088, lng: 78.868,
+        height: "145m Gorge Wall",
+        capacity: "8.72 BCM",
+        storagePct: "74%",
+        status: "HYDRO GENERATION ACTIVE"
+      },
+      {
+        name: "Mettur Dam (Stanley)",
+        river: "Kaveri River",
+        state: "Tamil Nadu (Salem)",
+        lat: 11.800, lng: 77.800,
+        height: "65m Dam",
+        capacity: "2.65 BCM (Stanley Res.)",
+        storagePct: "82%",
+        status: "DELTA IRRIGATION DISCHARGE"
+      },
+      {
+        name: "Idukki Arch Dam",
+        river: "Periyar River",
+        state: "Kerala (Western Ghats)",
+        lat: 9.850, lng: 76.974,
+        height: "168.9m Double Arch",
+        capacity: "1.99 BCM",
+        storagePct: "76%",
+        status: "MONSOON SPILL WATCH"
+      },
+      {
+        name: "Almatti Dam (LBS Sagar)",
+        river: "Krishna River",
+        state: "Karnataka",
+        lat: 16.331, lng: 75.888,
+        height: "519.6m MSL",
+        capacity: "3.48 BCM",
+        storagePct: "79%",
+        status: "UPSTREAM KRISHNA BUFFER"
+      },
+      {
+        name: "Pong Dam (Maharana Pratap)",
+        river: "Beas River",
+        state: "Himachal Pradesh",
+        lat: 31.968, lng: 75.952,
+        height: "133m Earthfill",
+        capacity: "8.57 BCM",
+        storagePct: "65%",
+        status: "PUNJAB FLOOD BUFFER"
+      },
+      {
+        name: "Rihand Dam (Govind Ballabh Pant)",
+        river: "Rihand (Son Basin)",
+        state: "Uttar Pradesh (Sonbhadra)",
+        lat: 24.205, lng: 83.033,
+        height: "91.4m",
+        capacity: "10.6 BCM (Largest Reservoir)",
+        storagePct: "72%",
+        status: "THERMAL COOLING & FLOW MOD"
+      },
+      {
+        name: "Kallanai (Grand Anicut)",
+        river: "Kaveri Delta",
+        state: "Tamil Nadu (Thanjavur)",
+        lat: 10.832, lng: 78.818,
+        height: "Ancient Chola Regulator (329m)",
+        capacity: "4 Canal Bifurcation",
+        storagePct: "Normal",
+        status: "HISTORIC DELTA DIVIDER"
+      }
+    ];
+
+    strategicDams.forEach(dam => {
+      const damIcon = L.divIcon({
+        className: 'dam-marker',
+        html: `
+          <div class="tactical-marker-pin">
+            <div class="relative flex items-center justify-center w-5 h-5 rounded bg-blue-500 text-slate-950 font-bold border border-white shadow-md">
+              <span class="w-2 h-2 bg-white rounded-full"></span>
+            </div>
+            <div class="dam-badge">
+              🏗️ ${dam.name.split(' ')[0]} (${dam.storagePct})
+            </div>
+          </div>
+        `,
+        iconSize: [120, 24],
+        iconAnchor: [10, 12]
+      });
+
+      const damMarker = L.marker([dam.lat, dam.lng], { icon: damIcon }).addTo(damsGroup);
+      damMarker.bindPopup(`
+        <div class="p-1.5">
+          <div class="flex items-center justify-between pb-1 mb-1.5 border-b border-slate-700">
+            <span class="text-xs font-bold text-sky-400 flex items-center gap-1">
+              🏗️ ${dam.name}
+            </span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] bg-sky-950 text-sky-300 font-bold border border-sky-700 font-mono">${dam.storagePct}</span>
+          </div>
+          <div class="text-[11px] space-y-1 text-slate-300">
+            <div><strong class="text-slate-400">River & Basin:</strong> ${dam.river} (${dam.state})</div>
+            <div><strong class="text-slate-400">Engineering Specs:</strong> ${dam.height} | Cap: <span class="text-white font-mono font-bold">${dam.capacity}</span></div>
+            <div class="pt-1 border-t border-slate-800 flex justify-between text-[10px]">
+              <span class="text-slate-400">Operational Role:</span>
+              <span class="text-emerald-300 font-semibold">${dam.status}</span>
+            </div>
+          </div>
+        </div>
+      `);
+    });
+
+    // ================================================================
+    // --- 4. EVACUATION CORRIDORS & HIGH-GROUND SAFE RELIEF CAMPS ---
+    // ================================================================
+    // Safe Relief Camps (High Ground Hubs)
+    const evacuationShelters = [
+      {
+        name: "Akshardham High-Ground Relief Complex",
+        lat: 28.6127,
+        lng: 77.2773,
+        capacity: "8,500 evacuees",
+        status: "ACTIVE • OPEN",
+        amenities: "Emergency ICU, Clean Water Purification, Helipad",
+        basin: "Yamuna NCR",
+        elev: "218m (Dry Crest)"
+      },
+      {
+        name: "Burari Disaster Relief Enclave",
+        lat: 28.7535,
+        lng: 77.1950,
+        capacity: "5,200 evacuees",
+        status: "ACTIVE • OPEN",
+        amenities: "Food Distribution Hub, NDMA Transit Tents",
+        basin: "Yamuna North",
+        elev: "216m (Dry Crest)"
+      },
+      {
+        name: "Sarusajai Highland Emergency Center",
+        lat: 26.1150,
+        lng: 91.7650,
+        capacity: "12,000 evacuees",
+        status: "ACTIVE • OPEN",
+        amenities: "SDRF Regional Operations Base, Medical Triage",
+        basin: "Brahmaputra",
+        elev: "62m (Dry Crest)"
+      },
+      {
+        name: "Patna Elevated Bypass Relief Center",
+        lat: 25.5800,
+        lng: 85.1200,
+        capacity: "6,400 evacuees",
+        status: "RESERVE • STANDBY",
+        amenities: "Civil Defense Storage, Mobile Generators",
+        basin: "Ganges",
+        elev: "54m (Dry Crest)"
+      }
+    ];
+
+    evacuationShelters.forEach(camp => {
+      const campIcon = L.divIcon({
+        className: 'shelter-marker',
+        html: `
+          <div class="tactical-marker-pin">
+            <div class="relative flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-bold border-2 border-white shadow-lg">
+              <span class="beacon-pulse bg-emerald-400"></span>
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16"/><path d="M12 7v5"/><path d="M9 10h6"/></svg>
+            </div>
+            <div class="shelter-badge">
+              ⛺ ${camp.name.split(' ')[0]} Camp
+            </div>
+          </div>
+        `,
+        iconSize: [140, 28],
+        iconAnchor: [12, 14]
+      });
+
+      const campMarker = L.marker([camp.lat, camp.lng], { icon: campIcon }).addTo(evacGroup);
+      campMarker.bindPopup(`
+        <div class="p-1.5">
+          <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700">
+            <span class="text-xs font-bold text-emerald-400 flex items-center gap-1">
+              ⛺ ${camp.name}
+            </span>
+            <span class="px-1.5 py-0.5 rounded text-[9.5px] bg-emerald-950 text-emerald-300 font-bold border border-emerald-700">${camp.status}</span>
+          </div>
+          <div class="text-[11px] space-y-1 text-slate-300">
+            <div><strong class="text-slate-400">Basin Sector:</strong> ${camp.basin} (${camp.elev})</div>
+            <div><strong class="text-slate-400">Capacity:</strong> <span class="text-white font-bold">${camp.capacity}</span></div>
+            <div><strong class="text-slate-400">Facilities:</strong> ${camp.amenities}</div>
+            <div class="text-[10px] text-emerald-400 font-mono mt-1">NDMA Designated Safe Zone • Direct Highway Ingress</div>
+          </div>
+        </div>
+      `);
+    });
+
+    // Evacuation Corridors (Green animated flow paths leading to dry ground)
+    const evacCorridors = [
+      // Yamuna Bazaar to Akshardham Highland
+      [[28.665, 77.245], [28.645, 77.260], [28.615, 77.275]],
+      // Mayur Vihar low-lying to NH-24 flyover crest
+      [[28.595, 77.295], [28.608, 77.285], [28.612, 77.278]],
+      // Pandu lowlands to Sarusajai Highland
+      [[26.170, 91.695], [26.145, 91.730], [26.120, 91.760]]
+    ];
+
+    evacCorridors.forEach((path, idx) => {
+      L.polyline(path, {
+        color: '#10B981',
+        weight: 3.5,
+        opacity: 0.9,
+        className: 'evac-route-anim'
+      }).addTo(evacGroup).bindTooltip(`Safe Evacuation Corridor #${idx + 1} (Direct Route to Shelter)`, { sticky: true });
+    });
+
+    // Live Cursor Tracker (HUD at bottom of map) with Dynamic Indian Region Detection
+    map.on('mousemove', (e) => {
+      const hud = document.getElementById('gis-coords-hud');
+      if (hud) {
+        const lat = parseFloat(e.latlng.lat);
+        const lng = parseFloat(e.latlng.lng);
+        const latStr = lat.toFixed(4);
+        const lngStr = lng.toFixed(4);
+
+        // Dynamic geographic region identification across India
+        let regionName = "Indian Subcontinent";
+        let elevEstimate = 207;
+
+        if (lat >= 32.0) {
+          if (lng > 77.0) { regionName = "Ladakh Trans-Himalayas"; elevEstimate = Math.round(3500 + (lat - 32) * 500); }
+          else { regionName = "Kashmir Valley & Pir Panjal"; elevEstimate = Math.round(1600 + (lat - 32) * 200); }
+        } else if (lat >= 29.5 && lat < 32.0) {
+          if (lng > 78.0) { regionName = "Uttarakhand Garhwal & Kumaon"; elevEstimate = Math.round(1200 + (lat - 29.5) * 400); }
+          else if (lng > 76.0) { regionName = "Himachal Shivalik Hills"; elevEstimate = Math.round(900 + (lat - 29.5) * 300); }
+          else { regionName = "Punjab Upper Doab"; elevEstimate = 240; }
+        } else if (lat >= 25.0 && lat < 29.5) {
+          if (lng < 75.0) { regionName = "Thar Desert & Aravalli Hills"; elevEstimate = Math.round(220 + (75 - lng) * 10); }
+          else if (lng >= 76.5 && lng <= 77.8 && lat >= 28.2 && lat <= 29.0) { regionName = "Delhi-NCR Yamuna Floodplain"; elevEstimate = 208; }
+          else if (lng < 84.0) { regionName = "Upper Indo-Gangetic Plains (UP)"; elevEstimate = Math.round(110 + (84 - lng) * 8); }
+          else if (lng < 88.5) { regionName = "Middle Ganga & Kosi Plains (Bihar)"; elevEstimate = Math.round(52 + (88.5 - lng) * 5); }
+          else { regionName = "Brahmaputra Valley (Assam Plains)"; elevEstimate = Math.round(48 + (lng - 88.5) * 4); }
+        } else if (lat >= 20.0 && lat < 25.0) {
+          if (lng < 73.5) { regionName = "Gujarat Plains & Gulf of Khambhat"; elevEstimate = 35; }
+          else if (lng < 81.0) { regionName = "Vindhya-Satpura Central Highlands"; elevEstimate = Math.round(450 + (lat - 20) * 40); }
+          else if (lng < 86.5) { regionName = "Chota Nagpur Plateau & Mahanadi Upper Basin"; elevEstimate = 320; }
+          else { regionName = "Ganges-Brahmaputra Bengal Delta / Sundarbans"; elevEstimate = 12; }
+        } else if (lat >= 14.0 && lat < 20.0) {
+          if (lng < 74.0) { regionName = "Konkan Coastal Strip"; elevEstimate = 22; }
+          else if (lng < 76.0) { regionName = "Northern Sahyadri / Western Ghats Crest"; elevEstimate = 850; }
+          else if (lng < 80.5) { regionName = "Deccan Plateau (Godavari-Krishna Divide)"; elevEstimate = 510; }
+          else { regionName = "Eastern Coastal Plains & Delta"; elevEstimate = 18; }
+        } else if (lat >= 8.0 && lat < 14.0) {
+          if (lng < 76.5) { regionName = "Malabar Coast & Nilgiri Ghats (Kerala)"; elevEstimate = Math.round(120 + (76.5 - lng) * 150); }
+          else if (lng < 78.5) { regionName = "Mysore Plateau & Cauvery Valley"; elevEstimate = 650; }
+          else { regionName = "Coromandel Coast (Tamil Nadu)"; elevEstimate = 15; }
+        }
+
+        hud.innerHTML = `LAT: <strong class="text-white">${latStr}° N</strong> | LON: <strong class="text-white">${lngStr}° E</strong> | ELEV: <strong class="text-cyan-300 font-mono">~${elevEstimate}m ASL</strong> <span class="text-slate-500">•</span> <span class="text-emerald-400 font-semibold">${regionName}</span>`;
+      }
+    });
+
+    // Layer Toggle Listeners for the 4 GIS Layers
+    const setupLayerToggle = (id, group) => {
+      const toggle = document.getElementById(id);
+      if (toggle) {
+        toggle.addEventListener('change', (e) => {
+          if (e.target.checked) map.addLayer(group);
+          else map.removeLayer(group);
+          updateActiveLayerCount();
+        });
+      }
+    };
+
+    setupLayerToggle('layer-rivers', riverFlowGroup);
+    setupLayerToggle('layer-basins', basinPolygonGroup);
+    setupLayerToggle('layer-dams', damsGroup);
+    setupLayerToggle('layer-evac', evacGroup);
+
+    function updateActiveLayerCount() {
+      let count = 0;
+      if (map.hasLayer(riverFlowGroup)) count++;
+      if (map.hasLayer(basinPolygonGroup)) count++;
+      if (map.hasLayer(damsGroup)) count++;
+      if (map.hasLayer(evacGroup)) count++;
+      const counterEl = document.getElementById('active-layers-count');
+      if (counterEl) {
+        counterEl.textContent = `${count} Layers Active`;
+      }
+    }
+
+    function resetMapView() {
+      map.flyTo([22.5937, 78.9629], 5, { duration: 1.2 });
+    }
+
+    function focusBasin(basin) {
+      if (basin === 'yamuna') {
+        map.flyTo([28.66, 77.25], 9.5, { duration: 1.2 });
+      } else if (basin === 'brahmaputra') {
+        map.flyTo([26.40, 92.80], 7.5, { duration: 1.2 });
+      } else if (basin === 'ganges') {
+        map.flyTo([25.60, 84.80], 7.5, { duration: 1.2 });
+      } else if (basin === 'himalayas') {
+        map.flyTo([32.8, 76.8], 6.5, { duration: 1.2 });
+      } else if (basin === 'deccan') {
+        map.flyTo([17.50, 78.80], 6.5, { duration: 1.2 });
+      } else if (basin === 'ghats') {
+        map.flyTo([12.50, 75.80], 7, { duration: 1.2 });
+      } else {
+        resetMapView();
+      }
+      setTimeout(() => map.invalidateSize(), 300);
+    }
+
+    // Fix map rendering on container resize
+    window.addEventListener('resize', () => map.invalidateSize());
+    setTimeout(() => map.invalidateSize(), 300);
+
+    // --- 5. Chart.js Hydrograph Implementation ---
+    const ctx = document.getElementById('hydrograph-chart').getContext('2d');
+    const hydroChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['-12h', '-8h', '-4h', 'Now', '+4h', '+8h', '+12h'],
+        datasets: [
+          {
+            label: 'River Stage (m)',
+            data: [204.2, 205.1, 206.5, 207.73, 208.4, 208.9, 208.1],
+            borderColor: '#EF4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            borderWidth: 2,
+            tension: 0.35,
+            fill: true,
+            pointRadius: [2, 2, 2, 5, 3, 3, 2],
+            pointBackgroundColor: '#EF4444',
+          },
+          {
+            label: 'Danger Mark (205.33m)',
+            data: [205.33, 205.33, 205.33, 205.33, 205.33, 205.33, 205.33],
+            borderColor: '#F59E0B',
+            borderWidth: 1.5,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            backgroundColor: '#1E293B',
+            titleColor: '#F8FAFC',
+            bodyColor: '#F8FAFC',
+            borderColor: '#475569',
+            borderWidth: 1
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(51, 65, 85, 0.4)' },
+            ticks: { color: '#94A3B8', font: { size: 10 } }
+          },
+          y: {
+            min: 203,
+            max: 210,
+            grid: { color: 'rgba(51, 65, 85, 0.4)' },
+            ticks: { color: '#94A3B8', font: { size: 10 }, stepSize: 2 }
+          }
+        }
+      }
+    });
+
+    // --- 6. Broadcast Log Terminal Operations ---
+    const terminalEl = document.getElementById('broadcast-terminal');
+    const logCountEl = document.getElementById('log-count-indicator');
+    let logEntriesCount = 4;
+
+    function getTimestamp() {
+      const now = new Date();
+      return now.toLocaleTimeString('en-GB', { hour12: false });
+    }
+
+    function appendTerminalLog(type, tag, district, message, status = "✓ TRANSMITTED") {
+      logEntriesCount++;
+      const timeStr = getTimestamp();
+
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'log-item flex items-start gap-2 border-b border-slate-800/60 pb-1.5 animate-pulse';
+      itemDiv.setAttribute('data-tag', tag);
+
+      let tagClass = "bg-blue-950 text-blue-400 border-blue-800/80";
+      if (tag === 'CAP') tagClass = "bg-red-950 text-red-400 border-red-800/80";
+      if (tag === 'SMS') tagClass = "bg-amber-950 text-amber-400 border-amber-800/80";
+      if (tag === 'WHATSAPP') tagClass = "bg-emerald-950 text-emerald-400 border-emerald-800/80";
+
+      itemDiv.innerHTML = `
+        <span class="text-slate-500 shrink-0 font-semibold">[${timeStr} IST]</span>
+        <span class="px-1.5 py-0.2 rounded ${tagClass} text-[10px] font-bold shrink-0 border">${tag}-ALERT</span>
+        <span class="text-slate-300">
+          <span class="text-cyan-300 font-semibold">[${district}]</span> ${message}
+        </span>
+        <span class="ml-auto text-emerald-400 text-[10px] shrink-0 font-bold">${status}</span>
+      `;
+
+      terminalEl.prepend(itemDiv);
+      logCountEl.textContent = `${logEntriesCount} Log Entries Displayed`;
+
+      // Remove pulse after 1.5s
+      setTimeout(() => {
+        itemDiv.classList.remove('animate-pulse');
+      }, 1500);
+    }
+
+    // Trigger Emergency Test Dispatch Button
+    document.getElementById('btn-trigger-dispatch').addEventListener('click', () => {
+      playDispatchPing();
+      const testDispatches = [
+        {
+          tag: 'CAP',
+          agency: 'NDMA-CAP-GATEWAY',
+          msg: 'Test Dispatch: High Priority Flash Flood alert routed to District Emergency Operations Center (DEOC) Hathras, Mathura & Agra.',
+          status: '✓ QUEUED (Priority 1)'
+        },
+        {
+          tag: 'SMS',
+          agency: 'BSNL/VI-BROADCAST',
+          msg: 'Cell Broadcast Alert #5841: Pre-evacuation Siren signal transmitted to 34 towers bordering Yamuna riverbed.',
+          status: '✓ SENT (100%)'
+        },
+        {
+          tag: 'WHATSAPP',
+          agency: 'SDMA-BOT-INFLOW',
+          msg: 'Automated Warning Message: Inundation risk level 88% confirmed by CWC gauge 11-DLH. Evacuation shelter map sent to 12,400 resident numbers.',
+          status: '✓ DELIVERED'
+        }
+      ];
+
+      const chosen = testDispatches[Math.floor(Math.random() * testDispatches.length)];
+      appendTerminalLog('EMERGENCY', chosen.tag, chosen.agency, chosen.msg, chosen.status);
+    });
+
+    document.getElementById('btn-clear-terminal').addEventListener('click', () => {
+      terminalEl.innerHTML = '';
+      logEntriesCount = 0;
+      logCountEl.textContent = '0 Log Entries Displayed';
+    });
+
+    function filterLogs(tag) {
+      document.querySelectorAll('.log-filter-btn').forEach(b => {
+        b.classList.remove('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/40');
+        b.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
+      });
+      event.target.classList.add('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/40');
+      event.target.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
+
+      const items = terminalEl.querySelectorAll('.log-item');
+      items.forEach(item => {
+        if (tag === 'all' || item.getAttribute('data-tag') === tag) {
+          item.style.display = 'flex';
+        } else {
+          item.style.display = 'none';
+        }
+      });
+    }
+
+    // --- 7. Simulate Critical Flood Level (>85% Risk) Action ---
+    let isSimulatingCritical = false;
+
+    const btnSimulate = document.getElementById('btn-simulate-flood');
+    const btnReset = document.getElementById('btn-reset-flood');
+    const bodyEl = document.body;
+
+    btnSimulate.addEventListener('click', () => {
+      isSimulatingCritical = true;
+      bodyEl.classList.add('emergency-active');
+      btnReset.classList.remove('hidden');
+      btnReset.classList.add('flex');
+
+      // Trigger siren sound
+      playEmergencyAlarm();
+
+      // Update Risk Metric
+      document.getElementById('metric-risk-val').textContent = '96%';
+      document.getElementById('risk-badge').textContent = 'CATACLYSMIC EMERGENCY';
+      document.getElementById('circle-risk-path').setAttribute('stroke-dasharray', '96, 100');
+
+      // Update Telemetry Metrics
+      document.getElementById('val-rainfall').textContent = '148 mm/hr';
+      document.getElementById('bar-rainfall').style.width = '96%';
+      document.getElementById('badge-rainfall').textContent = 'FLASH FLOOD EMERGENCY';
+
+      document.getElementById('val-river').textContent = '+3.6m Above Danger';
+      document.getElementById('bar-river').style.width = '98%';
+
+      document.getElementById('val-soil').textContent = '99%';
+      document.getElementById('bar-soil').style.width = '99%';
+      document.getElementById('badge-soil').textContent = 'TOTAL SATURATION - HIGH RUNOFF';
+
+      document.getElementById('val-barrage').textContent = '5,80,000 Cusecs';
+
+      // Update Chart to spike
+      hydroChart.data.datasets[0].data = [204.2, 205.1, 206.5, 207.73, 209.4, 210.2, 209.8];
+      hydroChart.update();
+
+      // Pan map to Yamuna NCR Sector 4
+      focusBasin('yamuna');
+
+      // Append high priority emergency dispatch logs
+      appendTerminalLog('CRITICAL', 'CAP', 'NDMA-EMERGENCY-HQ', 'NATIONAL EMERGENCY LEVEL RED ISSUED: Hathnikund discharge reached catastrophic 5.8 Lakh cusecs. Immediate mandatory evacuation ordered for Low-Lying Zones 1-6.', '⚡ ACTIVE PROTOCOL');
+      appendTerminalLog('CRITICAL', 'SMS', 'DDMA-DISPATCH-CORE', 'CAP v1.2 Broadcast broadcasted to 142,000 cellular devices in Delhi NCR East/North Districts.', '✓ DELIVERED (100%)');
+
+      // Periodic alarm pulse for simulation
+      setTimeout(() => {
+        if (isSimulatingCritical) playEmergencyAlarm();
+      }, 1800);
+    });
+
+    btnReset.addEventListener('click', () => {
+      isSimulatingCritical = false;
+      bodyEl.classList.remove('emergency-active');
+      btnReset.classList.add('hidden');
+      btnReset.classList.remove('flex');
+
+      // Revert Risk Metric
+      document.getElementById('metric-risk-val').textContent = '88%';
+      document.getElementById('risk-badge').textContent = 'CRITICAL SEVERE';
+      document.getElementById('circle-risk-path').setAttribute('stroke-dasharray', '88, 100');
+
+      // Revert Telemetry
+      document.getElementById('val-rainfall').textContent = '112 mm/hr';
+      document.getElementById('bar-rainfall').style.width = '78%';
+      document.getElementById('badge-rainfall').textContent = 'Heavy Rain Warning';
+
+      document.getElementById('val-river').textContent = '+2.4m Above Danger';
+      document.getElementById('bar-river').style.width = '86%';
+
+      document.getElementById('val-soil').textContent = '94%';
+      document.getElementById('bar-soil').style.width = '94%';
+      document.getElementById('badge-soil').textContent = 'Near Full Capacity';
+
+      document.getElementById('val-barrage').textContent = '3,52,400 Cusecs';
+
+      // Reset Chart
+      hydroChart.data.datasets[0].data = [204.2, 205.1, 206.5, 207.73, 208.4, 208.9, 208.1];
+      hydroChart.update();
+
+      resetMapView();
+    });
+
+    // Audio Toggle
+    const audioToggleBtn = document.getElementById('btn-audio-toggle');
+    const audioIcon = document.getElementById('audio-icon');
+    audioToggleBtn.addEventListener('click', () => {
+      audioMuted = !audioMuted;
+      if (audioMuted) {
+        audioIcon.setAttribute('data-lucide', 'volume-x');
+        audioToggleBtn.classList.add('text-red-400');
+      } else {
+        audioIcon.setAttribute('data-lucide', 'volume-2');
+        audioToggleBtn.classList.remove('text-red-400');
+        playTone(660, 0.1);
+      }
+      lucide.createIcons();
+    });
+
+    // --- 8. Initialize Lucide Icons ---
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+    });
+    // Call also right away
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+  </script>
+</body>
 </html>
